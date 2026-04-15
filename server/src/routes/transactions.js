@@ -1,10 +1,5 @@
-// ──────────────────────────────────────────────
-// vcrypt — Transaction Routes
-// ──────────────────────────────────────────────
-
 const express = require("express");
 const router = express.Router();
-
 const { authenticate } = require("../middleware/auth");
 const {
   createTransaction,
@@ -12,19 +7,15 @@ const {
   getMyTransactions,
   updateTransactionStatus,
 } = require("../controllers/transactionController");
+const {
+  validateCreateTransaction,
+  validateUpdateTransactionStatus,
+  validateTransactionVehicleId,
+} = require("../validators/transactionValidator");
 
-// ─── All routes require authentication ───────
-
-// POST /api/transactions — Create a new transaction
-router.post("/", authenticate, createTransaction);
-
-// GET /api/transactions/my — Get my transactions
+router.post("/", authenticate, validateCreateTransaction, createTransaction);
 router.get("/my", authenticate, getMyTransactions);
-
-// GET /api/transactions/vehicle/:vehicleId — Get transactions for a vehicle
-router.get("/vehicle/:vehicleId", authenticate, getTransactionsByVehicle);
-
-// PATCH /api/transactions/status — Update transaction status
-router.patch("/status", authenticate, updateTransactionStatus);
+router.get("/vehicle/:vehicleId", authenticate, validateTransactionVehicleId, getTransactionsByVehicle);
+router.patch("/status", authenticate, validateUpdateTransactionStatus, updateTransactionStatus);
 
 module.exports = router;

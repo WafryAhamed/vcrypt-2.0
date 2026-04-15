@@ -6,8 +6,11 @@ require("dotenv").config();
 
 const express = require("express");
 const cors = require("cors");
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
 
 // Import routes
+const authRoutes = require("./routes/auth");
 const userRoutes = require("./routes/users");
 const vehicleRoutes = require("./routes/vehicles");
 const transactionRoutes = require("./routes/transactions");
@@ -16,8 +19,12 @@ const transactionRoutes = require("./routes/transactions");
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// ─── Middleware ───────────────────────────────
+// ─── Security & Middleware ────────────────────────
 
+// Helmet for security headers
+app.use(helmet());
+
+// Cross-Origin Resource Sharing
 app.use(
   cors({
     origin: process.env.CORS_ORIGIN || "http://localhost:5173",
@@ -26,6 +33,15 @@ app.use(
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
+
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per window
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use("/api/", limiter); // Apply to API routes
 
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
@@ -56,6 +72,7 @@ app.get("/api/health", (req, res) => {
 
 // ─── API Routes ──────────────────────────────
 
+app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/vehicles", vehicleRoutes);
 app.use("/api/transactions", transactionRoutes);
@@ -74,38 +91,9 @@ app.use((req, res) => {
 app.use((err, req, res, next) => {
   console.error("Unhandled error:", err);
 
-  // Prisma-specific errors
-  if (err.code && err.code.startsWith("P")) {
-    return res.status(400).json({
-      success: false,
-      error: "Database operation failed.",
-      ...(process.env.NODE_ENV !== "production" && { details: err.message }),
-    });
-  }
-
-  // JWT errors
-  if (err.name === "JsonWebTokenError" || err.name === "TokenExpiredError") {
-    return res.status(401).json({
-      success: false,
-      error: "Invalid or expired token.",
-    });
-  }
-
-  // Validation errors
-  if (err.name === "ValidationError") {
-    return res.status(400).json({
-      success: false,
-      error: err.message,
-    });
-  }
-
-  // Default 500
-  res.status(err.status || 500).json({
+  return res.status(err.status || 500).json({
     success: false,
-    error:
-      process.env.NODE_ENV === "production"
-        ? "Internal server error."
-        : err.message || "Internal server error.",
+    error: err.message || "Internal server error.",
   });
 });
 

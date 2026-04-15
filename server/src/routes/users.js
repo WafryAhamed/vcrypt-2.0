@@ -1,32 +1,19 @@
-// ──────────────────────────────────────────────
-// vcrypt — User Routes
-// ──────────────────────────────────────────────
-
 const express = require("express");
 const router = express.Router();
-
 const { authenticate } = require("../middleware/auth");
-const {
-  register,
-  login,
-  getProfile,
-  updateWallet,
-} = require("../controllers/userController");
+const { register, login, getProfile, updateWallet } = require("../controllers/userController");
+const { validateUserRegister, validateUserLogin, validateUpdateWallet } = require("../validators/userValidator");
 
-// ─── Public Routes ───────────────────────────
+// POST /api/users/register
+router.post("/register", validateUserRegister, register);
 
-// POST /api/users/register — Register a new user
-router.post("/register", register);
+// POST /api/users/login
+router.post("/login", validateUserLogin, login);
 
-// POST /api/users/login — Login and get JWT
-router.post("/login", login);
-
-// ─── Protected Routes ────────────────────────
-
-// GET /api/users/profile — Get authenticated user's profile
+// GET /api/users/profile
 router.get("/profile", authenticate, getProfile);
 
-// PATCH /api/users/wallet — Update wallet address
-router.patch("/wallet", authenticate, updateWallet);
+// PATCH /api/users/wallet
+router.patch("/wallet", authenticate, validateUpdateWallet, updateWallet);
 
 module.exports = router;
