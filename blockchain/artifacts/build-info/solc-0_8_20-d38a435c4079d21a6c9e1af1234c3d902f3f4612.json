@@ -1,0 +1,36 @@
+{
+  "_format": "hh3-sol-build-info-1",
+  "id": "solc-0_8_20-d38a435c4079d21a6c9e1af1234c3d902f3f4612",
+  "solcVersion": "0.8.20",
+  "solcLongVersion": "0.8.20+commit.a1b79de6",
+  "compilerType": "solc",
+  "userSourceNameMap": {
+    "contracts/VehicleRegistry.sol": "project/contracts/VehicleRegistry.sol"
+  },
+  "input": {
+    "language": "Solidity",
+    "settings": {
+      "evmVersion": "shanghai",
+      "outputSelection": {
+        "*": {
+          "": [
+            "ast"
+          ],
+          "*": [
+            "abi",
+            "evm.bytecode",
+            "evm.deployedBytecode",
+            "evm.methodIdentifiers",
+            "metadata"
+          ]
+        }
+      },
+      "remappings": []
+    },
+    "sources": {
+      "project/contracts/VehicleRegistry.sol": {
+        "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.20;\n\ncontract VehicleRegistry {\n    struct Vehicle {\n        string vin;\n        address owner;\n        uint256 createdAt;\n        bool isActive;\n    }\n\n    uint256 private _nextTokenId;\n\n    mapping(uint256 => Vehicle) private _vehicles;\n    mapping(string => uint256) private _vinToTokenId;\n\n    event VehicleRegistered(uint256 indexed tokenId, string vin, address owner);\n    event VehicleTransferred(uint256 indexed tokenId, address from, address to);\n\n    constructor() {\n        _nextTokenId = 1;\n    }\n\n    function registerVehicle(string memory vin, string memory /*metadataURI*/) public {\n        require(_vinToTokenId[vin] == 0, \"Vehicle with this VIN already registered\");\n\n        uint256 tokenId = _nextTokenId++;\n        \n        _vehicles[tokenId] = Vehicle({\n            vin: vin,\n            owner: msg.sender,\n            createdAt: block.timestamp,\n            isActive: true\n        });\n\n        _vinToTokenId[vin] = tokenId;\n\n        // Ignoring metadataURI as requested in the struct mapping, however the function parameter is still requested to remain unchanged. Emitting without metadataURI as requested in event structure.\n        emit VehicleRegistered(tokenId, vin, msg.sender);\n    }\n\n    function transferVehicle(uint256 tokenId, address to) public {\n        require(_vehicles[tokenId].owner == msg.sender, \"Not the owner\");\n        require(to != address(0), \"Invalid address\");\n\n        address previousOwner = _vehicles[tokenId].owner;\n        _vehicles[tokenId].owner = to;\n\n        emit VehicleTransferred(tokenId, previousOwner, to);\n    }\n\n    function verifyVehicle(string memory vin) public view returns (bool) {\n        uint256 tokenId = _vinToTokenId[vin];\n        if (tokenId == 0) {\n            return false;\n        }\n        return _vehicles[tokenId].isActive;\n    }\n\n    function getVehicle(uint256 tokenId) public view returns (Vehicle memory) {\n        require(_vehicles[tokenId].createdAt != 0, \"Vehicle does not exist\");\n        return _vehicles[tokenId];\n    }\n}\n"
+      }
+    }
+  }
+}

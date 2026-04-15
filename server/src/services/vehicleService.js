@@ -63,26 +63,25 @@ async function registerVehicleService(userId, data) {
 
   let finalTxHash = txHash;
 
-  // Blockchain interaction (if writeContract is configured and no txHash was provided by frontend)
-  const { writeContract } = getContract();
+  // Blockchain interaction if no txHash provided
+  const { writeContract, readContract } = getContract();
   if (writeContract && !finalTxHash) {
      try {
-       const tx = await writeContract.registerVehicle(vin, `ipfs://${vin}`); // placeholder metadataURI
-       const receipt = await tx.wait();
+       const tx = await writeContract.registerVehicle(vin, `ipfs://${vin}`);
+       const receipt = await tx.wait(); // Confirm before saving locally
        finalTxHash = receipt.hash;
      } catch (err) {
-       console.error("Blockchain registration failed:", err.message);
-       // We can decide to throw or proceed depending on strictness. Let's throw to enforce blockchain sync.
        throw new Error("Blockchain registration failed: " + err.message);
      }
   }
 
+  // Set PENDING initially
   const vehicle = await prisma.vehicle.create({
     data: {
       vin, make, model, year: parseInt(year, 10), color, registrationNumber,
       ownerId: userId,
       txHash: finalTxHash || null,
-      status: "ACTIVE",
+      status: "ACTIVE", // Vehicle record is ACTIVE
     },
     include: {
       owner: {
@@ -92,16 +91,41 @@ async function registerVehicleService(userId, data) {
   });
 
   if (finalTxHash) {
-    await prisma.transaction.create({
+    const txRecord = await prisma.transaction.create({
       data: {
         vehicleId: vehicle.id,
         fromUserId: userId,
         toUserId: userId,
         txHash: finalTxHash,
         type: "REGISTRATION",
-        status: "CONFIRMED",
+        status: "PENDING", // Start as PENDING
       },
     });
+
+    // Asynchronously confirm if backend didn't send it originally
+    if (readContract && txHash) {
+      // Don't wait for it to block the API response
+      readContract.runner.provider.getTransactionReceipt(finalTxHash).then(async (receipt) => {
+         if (receipt && receipt.status === 1) {
+            await prisma.transaction.update({
+              where: { id: txRecord.id },
+              data: { status: "CONFIRMED" }
+            });
+            console.log(`Transaction ${finalTxHash} confirmed asynchronously.`);
+         } else {
+            await prisma.transaction.update({
+              where: { id: txRecord.id },
+              data: { status: "FAILED" }
+            });
+         }
+      }).catch(err => console.error("Receipt check failed:", err.message));
+    } else if (!txHash) {
+         // Backend generated the transaction itself and already waited. So it's confirmed.
+         await prisma.transaction.update({
+            where: { id: txRecord.id },
+            data: { status: "CONFIRMED" }
+         });
+    }
   }
 
   return vehicle;
@@ -154,43 +178,60 @@ async function transferVehicleService(userId, { vin, toUserId, txHash }) {
   let finalTxHash = txHash;
 
   // Blockchain interaction if no txHash provided
-  const { writeContract } = getContract();
+  const { writeContract, readContract } = getContract();
   if (writeContract && !finalTxHash) {
       try {
-        // Assume tokenId is the vehicle ID 
         const tx = await writeContract.transferVehicle(vehicle.id, toUser.walletAddress || ethers.ZeroAddress);
-        const receipt = await tx.wait();
+        const receipt = await tx.wait(); // backend wait
         finalTxHash = receipt.hash;
       } catch(err) {
         throw new Error("Blockchain transfer failed: " + err.message);
       }
   }
 
-  const [updatedVehicle, transaction] = await prisma.$transaction([
-    prisma.vehicle.update({
-      where: { vin },
-      data: {
-        ownerId: parseInt(toUserId, 10),
-        status: "TRANSFERRED",
-        txHash: finalTxHash,
-      },
-      include: {
-        owner: { select: { id: true, email: true, walletAddress: true } },
-      },
-    }),
-    prisma.transaction.create({
+  const updatedVehicle = await prisma.vehicle.update({
+    where: { vin },
+    data: {
+      ownerId: parseInt(toUserId, 10),
+      status: "TRANSFERRED",
+      txHash: finalTxHash,
+    },
+    include: { owner: { select: { id: true, email: true, walletAddress: true } } },
+  });
+
+  const txRecord = await prisma.transaction.create({
       data: {
         vehicleId: vehicle.id,
         fromUserId: userId,
         toUserId: parseInt(toUserId, 10),
-        txHash: finalTxHash || "0x0", // TxHash is required by Prisma schema potentially, better have it
+        txHash: finalTxHash || "0x0",
         type: "TRANSFER",
-        status: "CONFIRMED",
+        status: "PENDING", // PENDING initially
       },
-    }),
-  ]);
+  });
 
-  return { vehicle: updatedVehicle, transaction };
+  if (finalTxHash && finalTxHash !== "0x0" && txHash && readContract) {
+       readContract.runner.provider.getTransactionReceipt(finalTxHash).then(async (receipt) => {
+         if (receipt && receipt.status === 1) {
+            await prisma.transaction.update({
+              where: { id: txRecord.id },
+              data: { status: "CONFIRMED" }
+            });
+         } else {
+            await prisma.transaction.update({
+              where: { id: txRecord.id },
+              data: { status: "FAILED" }
+            });
+         }
+      }).catch(err => console.error("Receipt check failed:", err.message));
+  } else if (!txHash) {
+      await prisma.transaction.update({
+         where: { id: txRecord.id },
+         data: { status: "CONFIRMED" }
+      });
+  }
+
+  return { vehicle: updatedVehicle, transaction: txRecord };
 }
 
 async function verifyVehicleService(vin) {
