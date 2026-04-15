@@ -1,0 +1,96 @@
+// ──────────────────────────────────────────────
+// vcrypt — Prisma Schema
+// ──────────────────────────────────────────────
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ───────────────────────────────────
+
+enum VehicleStatus {
+  ACTIVE
+  TRANSFERRED
+  FLAGGED
+}
+
+enum TransactionType {
+  REGISTRATION
+  TRANSFER
+  VERIFICATION
+}
+
+enum TransactionStatus {
+  PENDING
+  CONFIRMED
+  FAILED
+}
+
+enum UserRole {
+  USER
+  ADMIN
+  OFFICER
+}
+
+// ─── Models ──────────────────────────────────
+
+model User {
+  id            Int       @id @default(autoincrement())
+  walletAddress String?   @unique
+  email         String    @unique
+  passwordHash  String
+  role          UserRole  @default(USER)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  vehicles          Vehicle[]      @relation("OwnerVehicles")
+  transactionsFrom  Transaction[]  @relation("TransactionFrom")
+  transactionsTo    Transaction[]  @relation("TransactionTo")
+
+  @@map("users")
+}
+
+model Vehicle {
+  id                 Int            @id @default(autoincrement())
+  vin                String         @unique
+  make               String
+  model              String
+  year               Int
+  color              String
+  registrationNumber String         @unique
+  ownerId            Int
+  status             VehicleStatus  @default(ACTIVE)
+  txHash             String?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  // Relations
+  owner        User          @relation("OwnerVehicles", fields: [ownerId], references: [id])
+  transactions Transaction[]
+
+  @@map("vehicles")
+}
+
+model Transaction {
+  id         Int               @id @default(autoincrement())
+  vehicleId  Int
+  fromUserId Int
+  toUserId   Int
+  txHash     String            @unique
+  type       TransactionType
+  status     TransactionStatus @default(PENDING)
+  createdAt  DateTime          @default(now())
+
+  // Relations
+  vehicle  Vehicle @relation(fields: [vehicleId], references: [id])
+  fromUser User    @relation("TransactionFrom", fields: [fromUserId], references: [id])
+  toUser   User    @relation("TransactionTo", fields: [toUserId], references: [id])
+
+  @@map("transactions")
+}
