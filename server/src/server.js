@@ -97,7 +97,9 @@ app.use((err, req, res, next) => {
   });
 });
 
-// ─── Start Server ────────────────────────────
+// ─── Start Server & Listeners ─────────────────
+
+const { startEventListener } = require("./services/eventListener");
 
 app.listen(PORT, () => {
   console.log(`
@@ -111,6 +113,9 @@ app.listen(PORT, () => {
   ║                                          ║
   ╚══════════════════════════════════════════╝
   `);
+
+  // Start the blockchain event listener
+  startEventListener();
 });
 
 module.exports = app;

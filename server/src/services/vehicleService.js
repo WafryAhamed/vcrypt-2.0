@@ -81,7 +81,7 @@ async function registerVehicleService(userId, data) {
       vin, make, model, year: parseInt(year, 10), color, registrationNumber,
       ownerId: userId,
       txHash: finalTxHash || null,
-      status: "ACTIVE", // Vehicle record is ACTIVE
+      status: "PENDING", // PENDING UNTIL CONFIRMED BY BLOCKCHAIN EVENT
     },
     include: {
       owner: {
@@ -101,31 +101,7 @@ async function registerVehicleService(userId, data) {
         status: "PENDING", // Start as PENDING
       },
     });
-
-    // Asynchronously confirm if backend didn't send it originally
-    if (readContract && txHash) {
-      // Don't wait for it to block the API response
-      readContract.runner.provider.getTransactionReceipt(finalTxHash).then(async (receipt) => {
-         if (receipt && receipt.status === 1) {
-            await prisma.transaction.update({
-              where: { id: txRecord.id },
-              data: { status: "CONFIRMED" }
-            });
-            console.log(`Transaction ${finalTxHash} confirmed asynchronously.`);
-         } else {
-            await prisma.transaction.update({
-              where: { id: txRecord.id },
-              data: { status: "FAILED" }
-            });
-         }
-      }).catch(err => console.error("Receipt check failed:", err.message));
-    } else if (!txHash) {
-         // Backend generated the transaction itself and already waited. So it's confirmed.
-         await prisma.transaction.update({
-            where: { id: txRecord.id },
-            data: { status: "CONFIRMED" }
-         });
-    }
+    // Removed synchronous blockchain polling to rely on Event Listener service
   }
 
   return vehicle;
