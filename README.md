@@ -2,8 +2,6 @@
 
 <div align="center">
 
-<img src="assets/silocin.svg" width="120" />
-
 ### 🔐 Blockchain-Based Vehicle Ownership System
 
 <p>
